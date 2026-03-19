@@ -320,7 +320,7 @@ setInterval(()=> document.getElementById('clock').textContent=
 
 // MAP
 const map = L.map('map',{zoomControl:true,attributionControl:false})
-             .setView([13.0827, 80.2707], 16);
+             .setView([13.1038, 80.1132], 16);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20}).addTo(map);
 
 // Pi trail (orange dashed)
@@ -538,6 +538,7 @@ function connectSSE() {
     const det=JSON.parse(e.data);
     if(!isPi(det)) return;
     addMarker(det); addFeed(det); countDet(det); toast(det);
+    map.setView([det.latitude, det.longitude], map.getZoom(), {animate:true, duration:0.5});
     document.getElementById('piStream').textContent=
       new Date().toLocaleTimeString('en-GB',{hour12:false});
   });
