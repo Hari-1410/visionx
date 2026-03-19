@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RoadSense — CARLA Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --bg:#080b0f;--panel:#0f1318;--p2:#141920;--bord:#1c2535;
+    --accent:#00e5ff;--high:#ff3b3b;--med:#ffaa00;--low:#00e676;
+    --crack:#c084fc;--muted:#4d6070;--text:#cce0f0;
+    --mono:'Share Tech Mono',monospace;--ui:'Barlow Condensed',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--ui);height:100vh;overflow:hidden;
+    display:grid;grid-template-rows:58px 1fr;grid-template-columns:340px 1fr 320px}
+
+  header{grid-column:1/-1;background:var(--panel);border-bottom:1px solid var(--bord);
+    display:flex;align-items:center;padding:0 22px;gap:16px;position:relative;overflow:hidden}
+  header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),var(--crack),transparent);
+    animation:hline 4s linear infinite}
+  @keyframes hline{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+  .logo{font-weight:900;font-size:24px;letter-spacing:5px;color:var(--accent);text-transform:uppercase;
+    text-shadow:0 0 20px rgba(0,229,255,.4)}
+  .logo b{color:var(--text);font-weight:900}
+  .hdiv{width:1px;height:28px;background:var(--bord)}
+  .htag{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:2px}
+  .nav-tabs{display:flex;gap:2px;margin-left:8px}
+  .nav-tab{font-family:var(--mono);font-size:11px;padding:5px 14px;border-radius:3px;
+    letter-spacing:1px;text-decoration:none;text-transform:uppercase;
+    background:transparent;border:1px solid var(--bord);color:var(--muted);transition:all .2s}
+  .nav-tab.active{background:rgba(0,229,255,.08);color:var(--accent);border-color:var(--accent)}
+  .nav-tab.pi{color:var(--med);border-color:rgba(255,170,0,.3)}
+  .nav-tab.pi:hover{background:rgba(255,170,0,.08);border-color:var(--med)}
+  .sdot{width:9px;height:9px;border-radius:50%;background:var(--med);box-shadow:0 0 8px var(--med);
+    animation:blink 2s ease-in-out infinite;margin-left:auto}
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+  .slabel{font-family:var(--mono);font-size:12px;letter-spacing:2px;margin-left:8px}
+  #clock{font-family:var(--mono);font-size:15px;margin-left:14px}
+
+  .left{background:var(--panel);border-right:1px solid var(--bord);display:flex;flex-direction:column;overflow:hidden}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bord)}
+  .scard{background:var(--p2);padding:14px 14px 12px;position:relative}
+  .scard::after{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+  .scard.c-total::after{background:var(--accent)}.scard.c-conf::after{background:var(--med)}
+  .scard.c-poth::after{background:var(--accent)}.scard.c-crack::after{background:var(--crack)}
+  .scard.c-today::after{background:var(--low)}.scard.c-high::after{background:var(--high)}
+  .sl{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .sv{font-family:var(--mono);font-size:32px;line-height:1;transition:color .3s}
+  .scard.c-total .sv{color:var(--accent)}.scard.c-conf .sv{color:var(--med);font-size:26px}
+  .scard.c-poth .sv{color:var(--accent)}.scard.c-crack .sv{color:var(--crack)}
+  .scard.c-today .sv{color:var(--low)}.scard.c-high .sv{color:var(--high)}
+  .ssub{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+
+  .sev-section{padding:14px 16px;border-bottom:1px solid var(--bord)}
+  .sec-title{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+  .brow{margin-bottom:9px}
+  .blabel{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;margin-bottom:4px}
+  .btrack{height:5px;background:rgba(255,255,255,.05);border-radius:3px;overflow:hidden}
+  .bfill{height:100%;border-radius:3px;transition:width .6s ease}
+
+  .pos-section{padding:14px 16px;border-bottom:1px solid var(--bord)}
+  .pos-row{display:grid;grid-template-columns:50px 1fr;gap:4px;align-items:baseline;margin-bottom:4px}
+  .pos-key{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .pos-val{font-family:var(--mono);font-size:15px;color:var(--accent)}
+
+  .pills{padding:12px 14px;display:flex;flex-direction:column;gap:6px;margin-top:auto}
+  .pill{background:var(--p2);border:1px solid var(--bord);border-radius:4px;padding:8px 12px;
+    font-family:var(--mono);font-size:13px;display:flex;justify-content:space-between}
+  .pill strong{font-size:15px;color:var(--accent)}
+
+  #map-wrap{position:relative;overflow:hidden;background:#111820}
+  #carla-canvas{display:block;width:100%;height:100%;cursor:grab}
+  #carla-canvas:active{cursor:grabbing}
+
+  .map-hud{position:absolute;top:14px;left:14px;z-index:10;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+  .map-pill{background:rgba(8,11,15,.88);border:1px solid var(--bord);border-radius:4px;
+    padding:6px 12px;font-family:var(--mono);font-size:12px;color:var(--muted);backdrop-filter:blur(8px)}
+  .map-pill strong{color:var(--accent);margin-left:6px}
+
+  .map-legend{position:absolute;bottom:16px;left:16px;z-index:10;
+    background:rgba(8,11,15,.9);border:1px solid var(--bord);border-radius:5px;
+    padding:10px 14px;font-family:var(--mono);font-size:12px;pointer-events:none}
+  .leg-row{display:flex;align-items:center;gap:8px;color:var(--muted);margin-bottom:5px}
+  .leg-row:last-child{margin-bottom:0}
+  .leg-c{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+  .leg-d{width:11px;height:11px;border-radius:2px;transform:rotate(45deg);flex-shrink:0}
+
+  #tooltip{position:absolute;background:var(--panel);border:1px solid var(--bord);
+    border-radius:5px;padding:11px 14px;font-family:var(--mono);font-size:12px;
+    line-height:1.9;pointer-events:none;z-index:20;display:none;min-width:200px;
+    box-shadow:0 4px 20px rgba(0,0,0,.6)}
+  #tooltip .tt{font-family:var(--ui);font-size:16px;font-weight:700;
+    margin-bottom:6px;letter-spacing:2px;border-bottom:1px solid var(--bord);padding-bottom:6px}
+
+  .right{background:var(--panel);border-left:1px solid var(--bord);display:flex;flex-direction:column;overflow:hidden}
+  .feed-hdr{padding:13px 16px 9px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bord)}
+  .feed-hdr-title{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted)}
+  .feed-hdr-count{font-family:var(--mono);font-size:16px;color:var(--accent)}
+  .f-tabs{display:flex;gap:1px;background:var(--bord);border-bottom:1px solid var(--bord)}
+  .ftab{flex:1;padding:9px 4px;font-family:var(--mono);font-size:11px;letter-spacing:1px;
+    text-transform:uppercase;background:var(--p2);color:var(--muted);border:none;cursor:pointer;transition:all .2s}
+  .ftab.on{background:var(--panel);color:var(--text)}
+  .ftab.on.t-all{border-top:2px solid var(--accent)}.ftab.on.t-pothole{border-top:2px solid var(--accent)}
+  .ftab.on.t-crack{border-top:2px solid var(--crack)}
+  #feed{flex:1;overflow-y:auto}
+  #feed::-webkit-scrollbar{width:3px}
+  #feed::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
+  .fi{padding:11px 14px;border-bottom:1px solid var(--bord);cursor:pointer;
+    transition:background .15s;animation:fin .3s ease;border-left:3px solid transparent}
+  .fi:hover{background:rgba(255,255,255,.025)}
+  .fi.pothole{border-left-color:var(--accent)}.fi.crack{border-left-color:var(--crack)}
+  @keyframes fin{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+  .fi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .fi-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;padding:2px 6px;border-radius:2px}
+  .fi-tag.pothole{background:rgba(0,229,255,.1);color:var(--accent)}
+  .fi-tag.crack{background:rgba(192,132,252,.1);color:var(--crack)}
+  .fi-sev{font-family:var(--mono);font-size:13px;font-weight:700}
+  .fi-sev.HIGH{color:var(--high)}.fi-sev.MEDIUM{color:var(--med)}.fi-sev.LOW{color:var(--low)}
+  .fi-id{font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:3px}
+  .fi-coord{font-family:var(--mono);font-size:13px;color:var(--accent);margin-bottom:3px}
+  .fi-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+
+  #toast{position:fixed;bottom:22px;right:22px;z-index:9999;
+    background:var(--panel);border:1px solid var(--bord);border-left:4px solid var(--high);
+    padding:13px 18px;font-family:var(--mono);font-size:13px;color:var(--text);
+    border-radius:4px;opacity:0;transform:translateY(80px);
+    transition:all .35s cubic-bezier(.34,1.56,.64,1);max-width:300px;line-height:1.6}
+  #toast.on{opacity:1;transform:translateY(0)}
+  #toast .tt{font-size:10px;letter-spacing:2px;color:var(--muted);margin-bottom:3px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Road<b>Sense</b></div>
+  <div class="hdiv"></div>
+  <div class="htag">CARLA SIMULATION MAP</div>
+  <div class="nav-tabs">
+    <a href="/" class="nav-tab active">CARLA</a>
+    <a href="/pi.html" class="nav-tab pi">RASPBERRY PI</a>
+  </div>
+  <div class="sdot" id="sdot"></div>
+  <div class="slabel" id="slabel" style="color:var(--med);margin-left:8px">CONNECTING</div>
+  <div id="clock">--:--:--</div>
+</header>
+
+<div class="left">
+  <div class="stat-grid">
+    <div class="scard c-total"><div class="sl">Total</div><div class="sv" id="sTotal">—</div><div class="ssub" id="sToday">today: —</div></div>
+    <div class="scard c-conf" ><div class="sl">Avg Conf</div><div class="sv" id="sConf">—</div><div class="ssub">all detections</div></div>
+    <div class="scard c-poth" ><div class="sl">Potholes</div><div class="sv" id="sPoth">—</div><div class="ssub">road surface</div></div>
+    <div class="scard c-crack"><div class="sl">Cracks</div><div class="sv" id="sCrack">—</div><div class="ssub">pavement</div></div>
+    <div class="scard c-high" ><div class="sl">High Sev</div><div class="sv" id="sHigh">—</div><div class="ssub">critical</div></div>
+    <div class="scard c-today"><div class="sl">Today</div><div class="sv" id="sTodayN">—</div><div class="ssub">since midnight</div></div>
+  </div>
+  <div class="sev-section">
+    <div class="sec-title">Severity Breakdown</div>
+    <div class="brow">
+      <div class="blabel"><span style="color:var(--high)">HIGH</span><span id="bHV">—</span></div>
+      <div class="btrack"><div class="bfill" id="bH" style="width:0%;background:var(--high)"></div></div>
+    </div>
+    <div class="brow">
+      <div class="blabel"><span style="color:var(--med)">MEDIUM</span><span id="bMV">—</span></div>
+      <div class="btrack"><div class="bfill" id="bM" style="width:0%;background:var(--med)"></div></div>
+    </div>
+    <div class="brow">
+      <div class="blabel"><span style="color:var(--low)">LOW</span><span id="bLV">—</span></div>
+      <div class="btrack"><div class="bfill" id="bL" style="width:0%;background:var(--low)"></div></div>
+    </div>
+  </div>
+  <div class="pos-section">
+    <div class="sec-title">Live Vehicle Position</div>
+    <div class="pos-row"><span class="pos-key">X</span><span class="pos-val" id="pX">—</span></div>
+    <div class="pos-row"><span class="pos-key">Y</span><span class="pos-val" id="pY">—</span></div>
+    <div class="pos-row"><span class="pos-key">HEADING</span><span class="pos-val" id="pHdg">—°</span></div>
+    <div class="pos-row"><span class="pos-key">MAP</span><span class="pos-val" style="color:var(--muted);font-size:11px" id="pMap">—</span></div>
+  </div>
+  <div class="pills">
+    <div class="pill"><span>ROAD SEGS</span><strong id="pRoad">0</strong></div>
+    <div class="pill"><span>MARKERS</span><strong id="pMarkers">0</strong></div>
+    <div class="pill"><span>VEHICLE</span><strong id="pVeh" style="color:var(--high)">OFFLINE</strong></div>
+  </div>
+</div>
+
+<div id="map-wrap">
+  <canvas id="carla-canvas"></canvas>
+  <div class="map-hud">
+    <div class="map-pill">MAP <strong id="hudMap">CARLA</strong></div>
+    <div class="map-pill">STREAM <strong id="hudSSE" style="color:var(--med)">—</strong></div>
+    <div class="map-pill" style="font-size:11px;color:rgba(100,150,200,.6)">Scroll=zoom  Drag=pan</div>
+  </div>
+  <div class="map-legend">
+    <div class="leg-row"><div class="leg-c" style="background:var(--accent)"></div>Pothole</div>
+    <div class="leg-row"><div class="leg-d" style="background:var(--crack)"></div>Crack</div>
+    <div class="leg-row">
+      <svg width="16" height="14" viewBox="0 0 24 20" style="flex-shrink:0">
+        <rect x="2" y="6" width="20" height="12" rx="3" fill="#00e5ff"/>
+        <rect x="5" y="2" width="14" height="8" rx="2" fill="#00e5ff" opacity=".65"/>
+        <circle cx="7" cy="18" r="3" fill="#111820" stroke="#00e5ff" stroke-width="1.5"/>
+        <circle cx="17" cy="18" r="3" fill="#111820" stroke="#00e5ff" stroke-width="1.5"/>
+      </svg>
+      Vehicle
+    </div>
+    <div class="leg-row">
+      <div style="width:22px;height:2px;background:rgba(0,229,255,.5);flex-shrink:0;border-radius:1px"></div>
+      Trail
+    </div>
+  </div>
+  <div id="tooltip">
+    <div class="tt" id="tip-title"></div>
+    <div id="tip-body"></div>
+  </div>
+</div>
+
+<div class="right">
+  <div class="feed-hdr">
+    <div class="feed-hdr-title">Detection Feed</div>
+    <div class="feed-hdr-count" id="fCount">0</div>
+  </div>
+  <div class="f-tabs">
+    <button class="ftab t-all on"  onclick="setFilter('all',this)">ALL</button>
+    <button class="ftab t-pothole" onclick="setFilter('pothole',this)">POTHOLE</button>
+    <button class="ftab t-crack"   onclick="setFilter('crack',this)">CRACK</button>
+  </div>
+  <div id="feed"></div>
+</div>
+
+<div id="toast"><div class="tt" id="tt"></div><div id="tm"></div></div>
+
+<script>
+const KEY  = 'dev-dashboard-key-browser';
+const BASE = window.location.origin;
+let filter='all', feedN=0, markerN=0, pothCount=0, crackCount=0;
+
+setInterval(()=>document.getElementById('clock').textContent=
+  new Date().toLocaleTimeString('en-GB',{hour12:false}),1000);
+
+// ── CANVAS ──────────────────────────────────────────────────────────────────
+const wrap   = document.getElementById('map-wrap');
+const canvas = document.getElementById('carla-canvas');
+const ctx    = canvas.getContext('2d');
+
+let vp = {ox:0, oy:0, scale:3.5, dragging:false, mx:0, my:0};
+let roadSegs   = [];   // [[x1,y1],[x2,y2]]
+let sidewalks  = [];   // [[x,y], ...]
+let detections = [];
+let trailPts   = [];
+let vehiclePos = null;
+const MAX_TRAIL = 150;
+
+function resize() {
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+  draw();
+}
+window.addEventListener('resize', resize);
+
+function w2s(wx, wy) { return [wx*vp.scale+vp.ox, wy*vp.scale+vp.oy]; }
+function s2w(sx, sy) { return [(sx-vp.ox)/vp.scale, (sy-vp.oy)/vp.scale]; }
+
+function roadWidth() {
+  // Road line width scales with zoom — thicker when zoomed in
+  return Math.max(1.5, Math.min(12, vp.scale * 1.4));
+}
+
+function draw() {
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // ── Background ─────────────────────────────────────────────────────────
+  ctx.fillStyle = '#111820';
+  ctx.fillRect(0,0,W,H);
+
+  if (!roadSegs.length) {
+    ctx.fillStyle='rgba(0,229,255,0.12)';
+    ctx.font='600 15px Share Tech Mono,monospace';
+    ctx.textAlign='center';
+    ctx.fillText('Waiting for CARLA road network...', W/2, H/2-10);
+    ctx.fillText('Run smart_traffic.py to load the map', W/2, H/2+18);
+    ctx.textAlign='left';
+    return;
+  }
+
+  // ── Block fill (city block colour between roads) ────────────────────────
+  // We approximate blocks by filling bounding boxes. For a proper look
+  // we draw a slightly lighter rectangle grid under the roads.
+  ctx.fillStyle = '#161e28';
+  // Just fill the whole canvas — roads will be drawn on top
+  ctx.fillRect(0,0,W,H);
+
+  // ── Sidewalks / paths ──────────────────────────────────────────────────
+  if (sidewalks.length > 1 && vp.scale > 2) {
+    ctx.strokeStyle = 'rgba(50,70,90,0.6)';
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([2,4]);
+    // Draw as individual small squares
+    for (const [x,y] of sidewalks) {
+      const [sx,sy] = w2s(x,y);
+      if (sx<-4||sx>W+4||sy<-4||sy>H+4) continue;
+      ctx.fillStyle='rgba(30,45,60,0.4)';
+      ctx.fillRect(sx-1,sy-1,2,2);
+    }
+    ctx.setLineDash([]);
+  }
+
+  // ── Road casing (dark border under road) ──────────────────────────────
+  const rw = roadWidth();
+  ctx.lineCap  = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.strokeStyle = '#0d1520';
+  ctx.lineWidth   = rw + 3;
+  ctx.beginPath();
+  for (const [[x1,y1],[x2,y2]] of roadSegs) {
+    const [sx1,sy1]=w2s(x1,y1), [sx2,sy2]=w2s(x2,y2);
+    if (Math.max(sx1,sx2)<-20||Math.min(sx1,sx2)>W+20) continue;
+    if (Math.max(sy1,sy2)<-20||Math.min(sy1,sy2)>H+20) continue;
+    ctx.moveTo(sx1,sy1); ctx.lineTo(sx2,sy2);
+  }
+  ctx.stroke();
+
+  // ── Road surface ──────────────────────────────────────────────────────
+  ctx.strokeStyle = '#2a3a4e';
+  ctx.lineWidth   = rw;
+  ctx.beginPath();
+  for (const [[x1,y1],[x2,y2]] of roadSegs) {
+    const [sx1,sy1]=w2s(x1,y1), [sx2,sy2]=w2s(x2,y2);
+    if (Math.max(sx1,sx2)<-20||Math.min(sx1,sx2)>W+20) continue;
+    if (Math.max(sy1,sy2)<-20||Math.min(sy1,sy2)>H+20) continue;
+    ctx.moveTo(sx1,sy1); ctx.lineTo(sx2,sy2);
+  }
+  ctx.stroke();
+
+  // ── Centre line dashes (only when zoomed in enough) ───────────────────
+  if (vp.scale > 3) {
+    ctx.strokeStyle = 'rgba(60,80,100,0.5)';
+    ctx.lineWidth   = Math.max(0.5, rw * 0.12);
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath();
+    for (const [[x1,y1],[x2,y2]] of roadSegs) {
+      const [sx1,sy1]=w2s(x1,y1), [sx2,sy2]=w2s(x2,y2);
+      if (Math.max(sx1,sx2)<-20||Math.min(sx1,sx2)>W+20) continue;
+      if (Math.max(sy1,sy2)<-20||Math.min(sy1,sy2)>H+20) continue;
+      ctx.moveTo(sx1,sy1); ctx.lineTo(sx2,sy2);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Trail ─────────────────────────────────────────────────────────────
+  if (trailPts.length > 1) {
+    ctx.strokeStyle = 'rgba(0,229,255,0.55)';
+    ctx.lineWidth   = 3;
+    ctx.setLineDash([5,6]);
+    ctx.lineCap='round';
+    ctx.beginPath();
+    const [sx0,sy0]=w2s(trailPts[0][0],trailPts[0][1]);
+    ctx.moveTo(sx0,sy0);
+    for (let i=1;i<trailPts.length;i++) {
+      const [sx,sy]=w2s(trailPts[i][0],trailPts[i][1]);
+      ctx.lineTo(sx,sy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Detection markers ─────────────────────────────────────────────────
+  for (const d of detections) {
+    const [sx,sy]=w2s(d.cx,d.cy);
+    if (sx<-20||sx>W+20||sy<-20||sy>H+20) continue;
+    const r = Math.max(5, vp.scale * 0.9);
+
+    if (d.type==='crack') {
+      const col=d.sev==='HIGH'?'#c084fc':d.sev==='MEDIUM'?'#a855f7':'#7c3aed';
+      ctx.save();
+      ctx.translate(sx,sy); ctx.rotate(Math.PI/4);
+      ctx.shadowColor=col; ctx.shadowBlur=10;
+      ctx.fillStyle=col;
+      const s=r*0.7;
+      ctx.fillRect(-s,-s,s*2,s*2);
+      ctx.restore();
+    } else {
+      const col=d.sev==='HIGH'?'#ff3b3b':d.sev==='MEDIUM'?'#ffaa00':'#00e676';
+      ctx.fillStyle=col;
+      ctx.shadowColor=col; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.arc(sx,sy,r*0.6,0,Math.PI*2); ctx.fill();
+    }
+    ctx.shadowBlur=0;
+  }
+
+  // ── Vehicle car icon ──────────────────────────────────────────────────
+  if (vehiclePos) {
+    const [sx,sy]=w2s(vehiclePos.x,vehiclePos.y);
+    const ang = vehiclePos.heading * Math.PI/180;
+
+    ctx.save();
+    ctx.translate(sx,sy);
+    ctx.rotate(ang + Math.PI/2);
+
+    const s = Math.max(8, vp.scale * 1.8);
+
+    // Glow
+    ctx.shadowColor='#00e5ff'; ctx.shadowBlur=20;
+
+    // Body
+    ctx.fillStyle='#00e5ff';
+    ctx.beginPath();
+    ctx.roundRect(-s*.5,-s*.75,s,s*1.5,s*.2);
+    ctx.fill();
+
+    // Cabin (roof)
+    ctx.fillStyle='rgba(0,180,220,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(-s*.38,-s*.85,s*.76,s*.65,s*.15);
+    ctx.fill();
+
+    // Windscreen dark
+    ctx.fillStyle='rgba(8,18,28,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(-s*.3,-s*.82,s*.6,s*.5,s*.1);
+    ctx.fill();
+
+    // Wheels
+    ctx.shadowBlur=0;
+    [[-.52,-.5],[.52,-.5],[-.52,.45],[.52,.45]].forEach(([wx,wy])=>{
+      ctx.fillStyle='#080b0f';
+      ctx.beginPath(); ctx.ellipse(wx*s,wy*s,s*.18,s*.22,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#00e5ff'; ctx.lineWidth=s*.06;
+      ctx.stroke();
+    });
+
+    // Headlights
+    ctx.fillStyle='rgba(255,255,140,0.95)';
+    ctx.shadowColor='#ffff80'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.ellipse(-s*.3,-s*.78,s*.1,s*.06,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse( s*.3,-s*.78,s*.1,s*.06,0,0,Math.PI*2); ctx.fill();
+
+    ctx.restore();
+    ctx.shadowBlur=0;
+  }
+}
+
+function fitView() {
+  if (!roadSegs.length) return;
+  let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+  for(const [[x1,y1],[x2,y2]] of roadSegs){
+    if(x1<mnX)mnX=x1; if(x1>mxX)mxX=x1;
+    if(y1<mnY)mnY=y1; if(y1>mxY)mxY=y1;
+    if(x2<mnX)mnX=x2; if(x2>mxX)mxX=x2;
+    if(y2<mnY)mnY=y2; if(y2>mxY)mxY=y2;
+  }
+  const W=canvas.width,H=canvas.height,pad=60;
+  const sx=(W-pad*2)/(mxX-mnX), sy=(H-pad*2)/(mxY-mnY);
+  vp.scale=Math.min(sx,sy,6);
+  vp.ox=pad-mnX*vp.scale;
+  vp.oy=pad-mnY*vp.scale;
+  draw();
+}
+
+// Zoom / pan
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  const f=e.deltaY<0?1.12:0.89;
+  vp.ox=mx-(mx-vp.ox)*f; vp.oy=my-(my-vp.oy)*f; vp.scale*=f;
+  draw();
+},{passive:false});
+
+canvas.addEventListener('mousedown',e=>{vp.dragging=true;vp.mx=e.clientX;vp.my=e.clientY});
+canvas.addEventListener('mousemove',e=>{
+  if(vp.dragging){
+    vp.ox+=e.clientX-vp.mx; vp.oy+=e.clientY-vp.my;
+    vp.mx=e.clientX; vp.my=e.clientY; draw();
+  }
+  // Tooltip
+  const rect=canvas.getBoundingClientRect();
+  const [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
+  const tip=document.getElementById('tooltip');
+  let found=null;
+  for(const d of detections){
+    const dx=d.cx-wx,dy=d.cy-wy;
+    if(Math.sqrt(dx*dx+dy*dy)<8/vp.scale){found=d;break}
+  }
+  if(found){
+    const sc=found.sev==='HIGH'?'#ff3b3b':found.sev==='MEDIUM'?'#ffaa00':'#00e676';
+    const tc=found.type==='crack'?'#c084fc':'#00e5ff';
+    document.getElementById('tip-title').style.color=tc;
+    document.getElementById('tip-title').textContent=
+      (found.type==='crack'?'⚡ CRACK':'⚠ POTHOLE')+' — '+found.sev;
+    document.getElementById('tip-body').innerHTML=
+      `<span style="color:#4d6070">ID</span> ${found.det.id}<br>`+
+      `<span style="color:#4d6070">CONF</span> ${(found.det.confidence*100).toFixed(1)}%<br>`+
+      `<span style="color:#4d6070">X</span> ${found.cx.toFixed(1)}  `+
+      `<span style="color:#4d6070">Y</span> ${found.cy.toFixed(1)}<br>`+
+      `<span style="color:#4d6070">TIME</span> ${(found.det.timestamp||'').split(' ')[1]||'—'}`;
+    tip.style.display='block';
+    tip.style.left=(e.clientX-rect.left+16)+'px';
+    tip.style.top =(e.clientY-rect.top-10)+'px';
+  } else {
+    tip.style.display='none';
+  }
+});
+canvas.addEventListener('mouseup',()=>vp.dragging=false);
+canvas.addEventListener('mouseleave',()=>{
+  vp.dragging=false;
+  document.getElementById('tooltip').style.display='none';
+});
+canvas.addEventListener('click',e=>{
+  const rect=canvas.getBoundingClientRect();
+  const [wx,wy]=s2w(e.clientX-rect.left,e.clientY-rect.top);
+  for(const d of detections){
+    const dx=d.cx-wx,dy=d.cy-wy;
+    if(Math.sqrt(dx*dx+dy*dy)<8/vp.scale){
+      vp.ox=canvas.width/2-d.cx*vp.scale;
+      vp.oy=canvas.height/2-d.cy*vp.scale;
+      draw(); break;
+    }
+  }
+});
+
+// ── DATA ───────────────────────────────────────────────────────────────────
+function onRoadNetwork(data) {
+  roadSegs  = data.segments  || [];
+  sidewalks = data.sidewalks || [];
+  document.getElementById('pRoad').textContent  = roadSegs.length;
+  document.getElementById('pMap').textContent   = (data.map||'—').split('/').pop();
+  document.getElementById('hudMap').textContent = (data.map||'CARLA').split('/').pop();
+  fitView();
+}
+
+function defType(det){
+  if(det.source==='crack'||(det.id||'').startsWith('CRK')) return 'crack';
+  return 'pothole';
+}
+
+function onDetection(det){
+  const cx=det.carla_x, cy=det.carla_y;
+  if(cx==null||cy==null) return;
+  const type=defType(det);
+  detections.push({cx,cy,sev:det.severity,type,det});
+  if(detections.length>400) detections.shift();
+  markerN++;
+  document.getElementById('pMarkers').textContent=markerN;
+  if(type==='crack') crackCount++; else pothCount++;
+  document.getElementById('sPoth').textContent=pothCount;
+  document.getElementById('sCrack').textContent=crackCount;
+  draw();
+}
+
+function onVehicle(v){
+  if(v.carla_x==null&&v.carla_x!==0) return;
+  vehiclePos={x:v.carla_x,y:v.carla_y,heading:v.heading||0};
+  trailPts.push([v.carla_x,v.carla_y]);
+  if(trailPts.length>MAX_TRAIL) trailPts.shift();
+  vp.ox=canvas.width/2 -v.carla_x*vp.scale;
+  vp.oy=canvas.height/2-v.carla_y*vp.scale;
+  document.getElementById('pX').textContent=v.carla_x.toFixed(1);
+  document.getElementById('pY').textContent=v.carla_y.toFixed(1);
+  document.getElementById('pHdg').textContent=Math.round(v.heading)+'°';
+  document.getElementById('pVeh').textContent='ONLINE';
+  document.getElementById('pVeh').style.color='var(--low)';
+  draw();
+}
+
+let lastVehTs=0;
+function pollVehicle(){
+  fetch(`${BASE}/api/vehicle`,{headers:{'X-API-Key':KEY}})
+    .then(r=>{if(!r.ok)throw 0;return r.json()})
+    .then(v=>{if(v.carla_x!=null){onVehicle(v);lastVehTs=Date.now()}})
+    .catch(()=>{});
+}
+setInterval(pollVehicle,400);
+setInterval(()=>{
+  if(lastVehTs>0&&Date.now()-lastVehTs>5000){
+    document.getElementById('pVeh').textContent='OFFLINE';
+    document.getElementById('pVeh').style.color='var(--high)';
+  }
+},3000);
+
+// Load road network
+fetch(`${BASE}/api/road_network`,{headers:{'X-API-Key':KEY}})
+  .then(r=>r.json()).then(d=>{if(d.segments&&d.segments.length)onRoadNetwork(d)}).catch(()=>{});
+
+// Feed
+function setFilter(f,btn){
+  filter=f;
+  document.querySelectorAll('.ftab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.fi').forEach(i=>{
+    i.style.display=(f==='all'||i.dataset.t===f)?'':'none';
+  });
+}
+
+function addFeed(det){
+  if(det.source==='pi'||(det.id||'').startsWith('PI')) return;
+  feedN++;
+  document.getElementById('fCount').textContent=feedN;
+  const type=defType(det);
+  const feed=document.getElementById('feed');
+  const el=document.createElement('div');
+  el.className=`fi ${type}`; el.dataset.t=type;
+  const ts=(det.timestamp||'').split(' ')[1]||'—';
+  el.innerHTML=`
+    <div class="fi-top">
+      <span class="fi-tag ${type}">${type==='crack'?'⚡ CRACK':'⚠ POTHOLE'}</span>
+      <span class="fi-sev ${det.severity}">${det.severity}</span>
+    </div>
+    <div class="fi-id">${det.id}</div>
+    <div class="fi-coord">X:${det.carla_x?.toFixed(1)||'?'}  Y:${det.carla_y?.toFixed(1)||'?'}</div>
+    <div class="fi-meta"><span>CONF ${(det.confidence*100).toFixed(0)}%</span><span>${ts}</span></div>`;
+  el.addEventListener('click',()=>{
+    if(det.carla_x!=null){
+      vp.ox=canvas.width/2-det.carla_x*vp.scale;
+      vp.oy=canvas.height/2-det.carla_y*vp.scale;
+      draw();
+    }
+  });
+  if(filter!=='all'&&el.dataset.t!==filter) el.style.display='none';
+  feed.insertBefore(el,feed.firstChild);
+  while(feed.children.length>200) feed.removeChild(feed.lastChild);
+}
+
+let toastT=null;
+function toast(det){
+  if(det.severity!=='HIGH') return;
+  document.getElementById('tt').textContent=defType(det)==='crack'?'⚡ HIGH CRACK':'⚠ HIGH POTHOLE';
+  document.getElementById('tm').textContent=`X:${det.carla_x?.toFixed(1)} Y:${det.carla_y?.toFixed(1)}`;
+  document.getElementById('toast').className='on';
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>document.getElementById('toast').className='',4000);
+}
+
+function updateStats(){
+  fetch(`${BASE}/api/stats`,{headers:{'X-API-Key':KEY}})
+    .then(r=>r.json()).then(d=>{
+      document.getElementById('sTotal').textContent =d.total;
+      document.getElementById('sToday').textContent =`today: ${d.today}`;
+      document.getElementById('sTodayN').textContent=d.today;
+      document.getElementById('sConf').textContent  =`${(d.avg_confidence*100).toFixed(0)}%`;
+      document.getElementById('sHigh').textContent  =d.high;
+      const t=d.total||1;
+      document.getElementById('bHV').textContent=d.high;
+      document.getElementById('bMV').textContent=d.medium;
+      document.getElementById('bLV').textContent=d.low;
+      document.getElementById('bH').style.width=`${(d.high/t*100).toFixed(1)}%`;
+      document.getElementById('bM').style.width=`${(d.medium/t*100).toFixed(1)}%`;
+      document.getElementById('bL').style.width=`${(d.low/t*100).toFixed(1)}%`;
+    }).catch(()=>{});
+}
+updateStats(); setInterval(updateStats,8000);
+
+// SSE
+function connectSSE(){
+  const es=new EventSource(`${BASE}/api/stream?key=${KEY}`);
+  es.addEventListener('connected',()=>{
+    document.getElementById('slabel').textContent='LIVE';
+    document.getElementById('slabel').style.color='var(--low)';
+    document.getElementById('sdot').style.cssText='background:var(--low);box-shadow:0 0 10px var(--low)';
+    document.getElementById('hudSSE').textContent='CONNECTED';
+    document.getElementById('hudSSE').style.color='var(--low)';
+  });
+  es.addEventListener('road_network',e=>{
+    const d=JSON.parse(e.data); onRoadNetwork(d);
+  });
+  es.addEventListener('detection',e=>{
+    const det=JSON.parse(e.data);
+    onDetection(det); addFeed(det); toast(det); updateStats();
+    document.getElementById('hudSSE').textContent=
+      new Date().toLocaleTimeString('en-GB',{hour12:false});
+  });
+  es.addEventListener('vehicle',e=>{
+    const v=JSON.parse(e.data);
+    if(v.source==='carla') onVehicle(v);
+  });
+  es.addEventListener('heartbeat',()=>{
+    document.getElementById('hudSSE').textContent=
+      '♥ '+new Date().toLocaleTimeString('en-GB',{hour12:false});
+  });
+  es.onerror=()=>{
+    document.getElementById('slabel').textContent='RECONNECTING';
+    document.getElementById('slabel').style.color='var(--med)';
+    document.getElementById('sdot').style.cssText='background:var(--med);box-shadow:0 0 8px var(--med)';
+    es.close(); setTimeout(connectSSE,3000);
+  };
+}
+connectSSE();
+resize();
+</script>
+</body>
+</html>

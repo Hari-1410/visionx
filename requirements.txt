@@ -1,0 +1,14 @@
+# RoadSense Backend — Python Dependencies
+flask>=3.0.0
+flask-cors>=4.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+gunicorn>=21.0.0       # Production WSGI server
+
+# Optional — for CARLA client
+# carla                # Install from CARLA's own wheel, not PyPI
+numpy>=1.24.0
+opencv-python-headless>=4.8.0
+
+# Optional — for TFLite on Raspberry Pi
+# tflite-runtime>=2.14.0   # ARM wheel: https://github.com/PINTO0309/TensorflowLite-bin

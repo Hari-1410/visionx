@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RoadSense — Raspberry Pi Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg:    #080b0f;
+    --panel: #0f1318;
+    --p2:    #141920;
+    --bord:  #1c2535;
+    --pi:    #ff6b35;
+    --pi2:   #ff8c55;
+    --high:  #ff3b3b;
+    --med:   #ffaa00;
+    --low:   #00e676;
+    --crack: #c084fc;
+    --muted: #4d6070;
+    --text:  #cce0f0;
+    --mono:  'Share Tech Mono', monospace;
+    --ui:    'Barlow Condensed', sans-serif;
+  }
+  *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:var(--bg); color:var(--text); font-family:var(--ui);
+    height:100vh; overflow:hidden;
+    display:grid;
+    grid-template-rows:58px 1fr;
+    grid-template-columns:340px 1fr 320px;
+  }
+
+  /* HEADER */
+  header {
+    grid-column:1/-1; background:var(--panel); border-bottom:1px solid var(--bord);
+    display:flex; align-items:center; padding:0 22px; gap:16px;
+    position:relative; overflow:hidden;
+  }
+  header::after {
+    content:''; position:absolute; bottom:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg,transparent,var(--pi),var(--pi2),transparent);
+    animation:hline 4s linear infinite;
+  }
+  @keyframes hline{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+  .logo { font-weight:900; font-size:24px; letter-spacing:5px; color:var(--pi); text-transform:uppercase; text-shadow:0 0 20px rgba(255,107,53,.4); }
+  .logo b { color:var(--text); font-weight:900; }
+  .logo-sub { font-family:var(--mono); font-size:11px; color:var(--pi); letter-spacing:3px; margin-left:-4px; }
+  .hdiv { width:1px; height:28px; background:var(--bord); }
+  .htag { font-family:var(--mono); font-size:12px; color:var(--muted); letter-spacing:2px; }
+
+  .nav-tabs { display:flex; gap:2px; margin-left:8px; }
+  .nav-tab {
+    font-family:var(--mono); font-size:11px; padding:5px 14px; border-radius:3px;
+    letter-spacing:1px; text-decoration:none; text-transform:uppercase;
+    background:transparent; border:1px solid var(--bord); color:var(--muted); transition:all .2s;
+  }
+  .nav-tab:hover { color:var(--text); }
+  .nav-tab.carla { color:#00e5ff; border-color:rgba(0,229,255,.3); }
+  .nav-tab.carla:hover { background:rgba(0,229,255,.08); border-color:#00e5ff; }
+  .nav-tab.active { background:rgba(255,107,53,.1); color:var(--pi); border-color:var(--pi); }
+
+  .sdot { width:9px; height:9px; border-radius:50%; background:var(--med); box-shadow:0 0 8px var(--med); animation:blink 2s ease-in-out infinite; margin-left:auto; }
+  @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+  .slabel { font-family:var(--mono); font-size:12px; letter-spacing:2px; margin-left:8px; }
+  #clock { font-family:var(--mono); font-size:15px; margin-left:14px; }
+
+  /* LEFT */
+  .left { background:var(--panel); border-right:1px solid var(--bord); display:flex; flex-direction:column; overflow:hidden; }
+
+  /* Pi device info card */
+  .pi-device-card {
+    background:linear-gradient(135deg, rgba(255,107,53,.08), rgba(255,140,85,.04));
+    border-bottom:1px solid var(--bord); padding:16px;
+    display:flex; align-items:center; gap:14px;
+  }
+  .pi-icon {
+    width:48px; height:48px; border-radius:8px;
+    background:rgba(255,107,53,.15); border:1px solid rgba(255,107,53,.3);
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; flex-shrink:0;
+  }
+  .pi-device-name { font-size:18px; font-weight:700; letter-spacing:2px; color:var(--pi); }
+  .pi-device-sub  { font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:3px; }
+  .pi-online { font-family:var(--mono); font-size:11px; color:var(--low); letter-spacing:1px; margin-top:4px; }
+
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--bord); }
+  .scard { background:var(--p2); padding:14px 14px 12px; position:relative; }
+  .scard::after { content:''; position:absolute; top:0;left:0;right:0; height:2px; }
+  .scard.c-total::after { background:var(--pi); }
+  .scard.c-conf::after  { background:var(--med); }
+  .scard.c-poth::after  { background:var(--low); }
+  .scard.c-crack::after { background:var(--crack); }
+  .scard.c-high::after  { background:var(--high); }
+  .scard.c-today::after { background:var(--low); }
+
+  .sl { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+  .sv { font-family:var(--mono); font-size:32px; line-height:1; }
+  .scard.c-total .sv { color:var(--pi); }
+  .scard.c-conf  .sv { color:var(--med); font-size:26px; }
+  .scard.c-poth  .sv { color:var(--low); }
+  .scard.c-crack .sv { color:var(--crack); }
+  .scard.c-high  .sv { color:var(--high); }
+  .scard.c-today .sv { color:var(--med); }
+  .ssub { font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:4px; }
+
+  .sev-section { padding:14px 16px; border-bottom:1px solid var(--bord); }
+  .sec-title { font-size:10px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+  .brow { margin-bottom:9px; }
+  .blabel { display:flex; justify-content:space-between; font-family:var(--mono); font-size:13px; margin-bottom:4px; }
+  .btrack { height:5px; background:rgba(255,255,255,.05); border-radius:3px; overflow:hidden; }
+  .bfill  { height:100%; border-radius:3px; transition:width .6s ease; }
+
+  /* Recent offline queue info */
+  .offline-section { padding:14px 16px; border-bottom:1px solid var(--bord); }
+  .offline-row { display:flex; justify-content:space-between; font-family:var(--mono); font-size:13px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.03); }
+  .offline-row:last-child { border-bottom:none; }
+  .ok { color:var(--muted); } .ov { color:var(--pi); }
+
+  .pills { padding:12px 14px; display:flex; flex-direction:column; gap:6px; margin-top:auto; }
+  .pill { background:var(--p2); border:1px solid var(--bord); border-radius:4px; padding:8px 12px; font-family:var(--mono); font-size:13px; display:flex; justify-content:space-between; }
+  .pill strong { font-size:15px; color:var(--pi); }
+
+  /* MAP */
+  #map { background:#0a0d10; }
+  .leaflet-tile { filter:brightness(.5) saturate(.25) hue-rotate(190deg); }
+  .leaflet-container { background:#0a0d10; }
+
+  .leaflet-popup-content-wrapper { background:#0f1318!important; border:1px solid #1c2535!important; border-radius:6px!important; box-shadow:0 8px 32px rgba(0,0,0,.8)!important; color:#cce0f0!important; }
+  .leaflet-popup-tip { background:#0f1318!important; }
+  .leaflet-popup-content { margin:0!important; padding:0!important; }
+  .pop { font-family:'Share Tech Mono',monospace; font-size:12px; padding:14px 16px; line-height:1.9; min-width:220px; }
+  .pop-title { font-family:'Barlow Condensed',sans-serif; font-size:18px; font-weight:700; letter-spacing:2px; border-bottom:1px solid #1c2535; padding-bottom:8px; margin-bottom:8px; }
+  .pr { display:flex; justify-content:space-between; gap:12px; }
+  .pk { color:#4d6070; } .pv { color:#cce0f0; }
+
+  /* Pi marker triangle */
+  .pi-tri { width:0; height:0; }
+
+  .map-legend {
+    position:absolute; bottom:16px; left:16px; z-index:1000;
+    background:rgba(8,11,15,.92); border:1px solid var(--bord); border-radius:5px;
+    padding:10px 14px; font-family:var(--mono); font-size:12px; pointer-events:none;
+    backdrop-filter:blur(8px);
+  }
+  .leg-row { display:flex; align-items:center; gap:8px; color:var(--muted); margin-bottom:5px; }
+  .leg-row:last-child { margin-bottom:0; }
+
+  /* RIGHT FEED */
+  .right { background:var(--panel); border-left:1px solid var(--bord); display:flex; flex-direction:column; overflow:hidden; }
+  .feed-hdr { padding:13px 16px 9px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--bord); }
+  .feed-hdr-title { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--muted); }
+  .feed-hdr-count { font-family:var(--mono); font-size:16px; color:var(--pi); }
+
+  .f-tabs { display:flex; gap:1px; background:var(--bord); border-bottom:1px solid var(--bord); }
+  .ftab { flex:1; padding:9px 4px; font-family:var(--mono); font-size:11px; letter-spacing:1px; text-transform:uppercase; background:var(--p2); color:var(--muted); border:none; cursor:pointer; transition:all .2s; }
+  .ftab.on { background:var(--panel); color:var(--text); }
+  .ftab.on.t-all     { border-top:2px solid var(--pi); }
+  .ftab.on.t-pothole { border-top:2px solid var(--low); }
+  .ftab.on.t-crack   { border-top:2px solid var(--crack); }
+  .ftab.on.t-replay  { border-top:2px solid var(--med); }
+
+  #feed { flex:1; overflow-y:auto; }
+  #feed::-webkit-scrollbar { width:3px; }
+  #feed::-webkit-scrollbar-thumb { background:var(--bord); border-radius:2px; }
+
+  .fi {
+    padding:11px 14px; border-bottom:1px solid var(--bord);
+    cursor:pointer; transition:background .15s; animation:fin .3s ease;
+    border-left:3px solid transparent; position:relative;
+  }
+  .fi:hover { background:rgba(255,255,255,.025); }
+  .fi.pothole { border-left-color:var(--low); }
+  .fi.crack   { border-left-color:var(--crack); }
+  .fi.replay  { border-left-color:var(--med); }
+  @keyframes fin{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+
+  .fi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .fi-tag { font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:2px; padding:2px 6px; border-radius:2px; }
+  .fi-tag.pothole { background:rgba(0,230,118,.1); color:var(--low); }
+  .fi-tag.crack   { background:rgba(192,132,252,.1); color:var(--crack); }
+  .fi-tag.replay  { background:rgba(255,170,0,.1); color:var(--med); }
+  .fi-sev { font-family:var(--mono); font-size:13px; font-weight:700; }
+  .fi-sev.HIGH   { color:var(--high); }
+  .fi-sev.MEDIUM { color:var(--med); }
+  .fi-sev.LOW    { color:var(--low); }
+  .fi-id    { font-family:var(--mono); font-size:12px; color:var(--text); margin-bottom:3px; }
+  .fi-coord { font-family:var(--mono); font-size:14px; color:var(--pi); margin-bottom:3px; }
+  .fi-meta  { font-family:var(--mono); font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
+  .fi-vid   { font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; }
+
+  #toast {
+    position:fixed; bottom:22px; right:22px; z-index:9999;
+    background:var(--panel); border:1px solid var(--bord); border-left:4px solid var(--pi);
+    padding:13px 18px; font-family:var(--mono); font-size:13px; color:var(--text);
+    border-radius:4px; opacity:0; transform:translateY(80px);
+    transition:all .35s cubic-bezier(.34,1.56,.64,1); max-width:300px; line-height:1.6;
+  }
+  #toast.on { opacity:1; transform:translateY(0); }
+  #toast .tt { font-size:10px; letter-spacing:2px; color:var(--pi); margin-bottom:3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">Road<b>Sense</b></div>
+    <div class="logo-sub">RASPBERRY PI</div>
+  </div>
+  <div class="hdiv"></div>
+  <div class="htag">EDGE DEVICE MONITOR</div>
+  <div class="nav-tabs">
+    <a href="/index.html" class="nav-tab carla">CARLA</a>
+    <a href="/pi.html"    class="nav-tab active">RASPBERRY PI</a>
+  </div>
+  <div class="sdot" id="sdot"></div>
+  <div class="slabel" id="slabel" style="color:var(--med)">CONNECTING</div>
+  <div id="clock">--:--:--</div>
+</header>
+
+<!-- LEFT -->
+<div class="left">
+  <div class="pi-device-card">
+    <div class="pi-icon">🍓</div>
+    <div>
+      <div class="pi-device-name">EDGE NODE</div>
+      <div class="pi-device-sub" id="piVehicleId">Vehicle ID: loading...</div>
+      <div class="pi-online" id="piStatus">● AWAITING DATA</div>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="scard c-total"><div class="sl">Pi Total</div><div class="sv" id="sTotal">—</div><div class="ssub" id="sToday">today: —</div></div>
+    <div class="scard c-conf" ><div class="sl">Avg Conf</div><div class="sv" id="sConf">—</div><div class="ssub">pi detections</div></div>
+    <div class="scard c-poth" ><div class="sl">Potholes</div><div class="sv" id="sPoth">0</div><div class="ssub">from pi</div></div>
+    <div class="scard c-crack"><div class="sl">Cracks</div><div class="sv" id="sCrack">0</div><div class="ssub">from pi</div></div>
+    <div class="scard c-high" ><div class="sl">High Sev</div><div class="sv" id="sHigh">0</div><div class="ssub">critical</div></div>
+    <div class="scard c-today"><div class="sl">Replayed</div><div class="sv" id="sReplay">0</div><div class="ssub">offline queue</div></div>
+  </div>
+
+  <div class="sev-section">
+    <div class="sec-title">Pi Severity Breakdown</div>
+    <div class="brow">
+      <div class="blabel"><span style="color:var(--high)">HIGH</span><span id="bHV" style="color:var(--text)">—</span></div>
+      <div class="btrack"><div class="bfill" id="bH" style="width:0%;background:var(--high)"></div></div>
+    </div>
+    <div class="brow">
+      <div class="blabel"><span style="color:var(--med)">MEDIUM</span><span id="bMV" style="color:var(--text)">—</span></div>
+      <div class="btrack"><div class="bfill" id="bM" style="width:0%;background:var(--med)"></div></div>
+    </div>
+    <div class="brow">
+      <div class="blabel"><span style="color:var(--low)">LOW</span><span id="bLV" style="color:var(--text)">—</span></div>
+      <div class="btrack"><div class="bfill" id="bL" style="width:0%;background:var(--low)"></div></div>
+    </div>
+  </div>
+
+  <div class="offline-section">
+    <div class="sec-title">Connection Info</div>
+    <div class="offline-row"><span class="ok">LAST SEEN</span><span class="ov" id="piLastSeen">—</span></div>
+    <div class="offline-row"><span class="ok">SOURCE</span><span class="ov">edge_client.py</span></div>
+    <div class="offline-row"><span class="ok">PROTOCOL</span><span class="ov">HTTP + SSE</span></div>
+    <div class="offline-row"><span class="ok">STREAM</span><span class="ov" id="piStream">—</span></div>
+  </div>
+
+  <div class="pills">
+    <div class="pill"><span>PI MARKERS</span><strong id="pMarkers">0</strong></div>
+    <div class="pill"><span>TOTAL (ALL)</span><strong id="pTotal" style="color:var(--text)">—</strong></div>
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map">
+  <div class="map-legend">
+    <div class="leg-row">
+      <div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:12px solid var(--pi);flex-shrink:0"></div>
+      Pi Pothole
+    </div>
+    <div class="leg-row">
+      <div style="width:11px;height:11px;background:var(--crack);border-radius:2px;transform:rotate(45deg);flex-shrink:0"></div>
+      Pi Crack
+    </div>
+    <div class="leg-row">
+      <div style="width:11px;height:11px;border-radius:50%;background:var(--med);flex-shrink:0"></div>
+      Replayed (offline)
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT FEED -->
+<div class="right">
+  <div class="feed-hdr">
+    <div class="feed-hdr-title">Pi Detection Feed</div>
+    <div class="feed-hdr-count" id="fCount">0</div>
+  </div>
+  <div class="f-tabs">
+    <button class="ftab t-all on"     onclick="setFilter('all',this)">ALL</button>
+    <button class="ftab t-pothole"    onclick="setFilter('pothole',this)">POTHOLE</button>
+    <button class="ftab t-crack"      onclick="setFilter('crack',this)">CRACK</button>
+    <button class="ftab t-replay"     onclick="setFilter('replay',this)">REPLAY</button>
+  </div>
+  <div id="feed"></div>
+</div>
+
+<div id="toast"><div class="tt" id="tt">📡 PI DETECTION</div><div id="tm"></div></div>
+
+<script>
+const KEY  = 'dev-dashboard-key-browser';
+const BASE = window.location.origin;
+let filter='all', feedN=0, markerN=0;
+let piHigh=0, piMed=0, piLow=0, piPoth=0, piCrack=0, piReplay=0, piConf=[];
+let piTrailPts=[], piVehicleId='—';
+let lastPiTs = null;
+
+setInterval(()=> document.getElementById('clock').textContent=
+  new Date().toLocaleTimeString('en-GB',{hour12:false}), 1000);
+
+// MAP
+const map = L.map('map',{zoomControl:true,attributionControl:false})
+             .setView([13.0827, 80.2707], 16);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20}).addTo(map);
+
+// Pi trail (orange dashed)
+const trail = L.polyline([],{color:'rgba(255,107,53,0.55)',weight:3,dashArray:'5 7',lineJoin:'round'}).addTo(map);
+
+async function snapAndDraw(pts) {
+  if (pts.length<2) return;
+  try {
+    const recent = pts.slice(-25);
+    const coords = recent.map(p=>`${p[1]},${p[0]}`).join(';');
+    const r = await fetch(
+      `https://router.project-osrm.org/match/v1/driving/${coords}?overview=full&geometries=geojson`,
+      {signal:AbortSignal.timeout(3000)}
+    );
+    if(!r.ok) throw new Error();
+    const d = await r.json();
+    if(d.matchings&&d.matchings[0]){
+      trail.setLatLngs(d.matchings[0].geometry.coordinates.map(c=>[c[1],c[0]]));
+      return;
+    }
+  } catch{}
+  trail.setLatLngs(pts.slice(-25));
+}
+
+let snapT=null;
+function addTrailPt(lat,lon) {
+  piTrailPts.push([lat,lon]);
+  if(piTrailPts.length>100) piTrailPts.shift();
+  clearTimeout(snapT);
+  snapT = setTimeout(()=>snapAndDraw(piTrailPts),600);
+}
+
+// Marker helpers
+const marks=[];
+const MAXM=400;
+
+function isPi(det) {
+  return det.source==='live'||det.source==='pi'||det.source==='replay'||
+         (det.vehicle_id||'').startsWith('PI')||(det.id||'').startsWith('PI');
+}
+
+function detType(det) {
+  if (det.source==='crack'||(det.id||'').startsWith('CRK')) return 'crack';
+  if (det.source==='replay') return 'replay';
+  return 'pothole';
+}
+
+function mkIcon(sev, type) {
+  if (type==='crack') {
+    const col = sev==='HIGH'?'#c084fc':sev==='MEDIUM'?'#a855f7':'#7c3aed';
+    return L.divIcon({className:'',
+      html:`<div style="width:12px;height:12px;background:${col};border-radius:2px;transform:rotate(45deg);border:1.5px solid rgba(255,255,255,.2);box-shadow:0 0 8px ${col}"></div>`,
+      iconSize:[14,14],iconAnchor:[7,7]});
+  }
+  if (type==='replay') {
+    // Yellow circle for replayed offline data
+    return L.divIcon({className:'',
+      html:`<div style="width:12px;height:12px;background:#ffaa00;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);box-shadow:0 0 8px #ffaa00;opacity:.8"></div>`,
+      iconSize:[12,12],iconAnchor:[6,6]});
+  }
+  // Pi pothole — orange triangle
+  const col = sev==='HIGH'?'#ff3b3b':sev==='MEDIUM'?'#ff6b35':'#ff8c55';
+  return L.divIcon({className:'',
+    html:`<div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid ${col};filter:drop-shadow(0 0 5px ${col})"></div>`,
+    iconSize:[16,14],iconAnchor:[8,14]});
+}
+
+function mkPopup(det,type) {
+  const sc = det.severity==='HIGH'?'#ff3b3b':det.severity==='MEDIUM'?'#ffaa00':'#00e676';
+  const tc = type==='crack'?'#c084fc':type==='replay'?'#ffaa00':'var(--pi)';
+  const tl = type==='crack'?'⚡ PI CRACK':type==='replay'?'🔁 REPLAYED':'📡 PI POTHOLE';
+  return `<div class="pop"><div class="pop-title" style="color:${tc}">${tl}</div>
+    <div class="pr"><span class="pk">ID</span><span class="pv">${det.id}</span></div>
+    <div class="pr"><span class="pk">SEVERITY</span><span class="pv" style="color:${sc}">${det.severity}</span></div>
+    <div class="pr"><span class="pk">CONFIDENCE</span><span class="pv">${(det.confidence*100).toFixed(1)}%</span></div>
+    <div class="pr"><span class="pk">LAT</span><span class="pv">${det.latitude.toFixed(6)}</span></div>
+    <div class="pr"><span class="pk">LON</span><span class="pv">${det.longitude.toFixed(6)}</span></div>
+    <div class="pr"><span class="pk">SOURCE</span><span class="pv">${det.source}</span></div>
+    <div class="pr"><span class="pk">VEHICLE</span><span class="pv">${det.vehicle_id||'—'}</span></div>
+    <div class="pr"><span class="pk">TIME</span><span class="pv">${det.timestamp}</span></div>
+  </div>`;
+}
+
+function addMarker(det) {
+  if (!isPi(det)) return;
+  const type = detType(det);
+  const m = L.marker([det.latitude,det.longitude],{icon:mkIcon(det.severity,type)}).addTo(map);
+  m.bindPopup(mkPopup(det,type),{maxWidth:260});
+  m.on('click',()=>m.openPopup());
+  marks.push(m); markerN++;
+  document.getElementById('pMarkers').textContent=markerN;
+  if(marks.length>MAXM) map.removeLayer(marks.shift());
+  addTrailPt(det.latitude, det.longitude);
+}
+
+// Local Pi stats
+function countDet(det) {
+  if(!isPi(det)) return;
+  const type=detType(det);
+  if(det.severity==='HIGH')   piHigh++;
+  if(det.severity==='MEDIUM') piMed++;
+  if(det.severity==='LOW')    piLow++;
+  if(type==='crack')  piCrack++;
+  else if(type==='replay') piReplay++;
+  else piPoth++;
+  piConf.push(det.confidence);
+  if(det.vehicle_id&&det.vehicle_id!==piVehicleId) {
+    piVehicleId=det.vehicle_id;
+    document.getElementById('piVehicleId').textContent=`Vehicle: ${piVehicleId}`;
+  }
+  lastPiTs=new Date();
+  document.getElementById('piStatus').textContent='● LIVE';
+  document.getElementById('piStatus').style.color='var(--low)';
+  document.getElementById('piLastSeen').textContent=lastPiTs.toLocaleTimeString('en-GB',{hour12:false});
+  renderStats();
+}
+
+function renderStats() {
+  const tot = piHigh+piMed+piLow||1;
+  document.getElementById('sTotal').textContent  = piHigh+piMed+piLow;
+  document.getElementById('sPoth').textContent   = piPoth;
+  document.getElementById('sCrack').textContent  = piCrack;
+  document.getElementById('sHigh').textContent   = piHigh;
+  document.getElementById('sReplay').textContent = piReplay;
+  const avg = piConf.length ? piConf.reduce((a,b)=>a+b,0)/piConf.length : 0;
+  document.getElementById('sConf').textContent   = `${(avg*100).toFixed(0)}%`;
+  document.getElementById('bHV').textContent=piHigh;
+  document.getElementById('bMV').textContent=piMed;
+  document.getElementById('bLV').textContent=piLow;
+  document.getElementById('bH').style.width=`${(piHigh/tot*100).toFixed(1)}%`;
+  document.getElementById('bM').style.width=`${(piMed/tot*100).toFixed(1)}%`;
+  document.getElementById('bL').style.width=`${(piLow/tot*100).toFixed(1)}%`;
+}
+
+// Overall total
+function fetchTotal() {
+  fetch(`${BASE}/api/stats`,{headers:{'X-API-Key':KEY}})
+    .then(r=>r.json()).then(d=>{
+      document.getElementById('sToday').textContent=`today: ${d.today}`;
+      document.getElementById('pTotal').textContent=d.total;
+    }).catch(()=>{});
+}
+fetchTotal(); setInterval(fetchTotal,10000);
+
+// Feed
+function setFilter(f,btn) {
+  filter=f;
+  document.querySelectorAll('.ftab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.fi').forEach(i=>{
+    i.style.display=(f==='all'||i.dataset.t===f)?'':'none';
+  });
+}
+
+function addFeed(det) {
+  if(!isPi(det)) return;
+  feedN++;
+  document.getElementById('fCount').textContent=feedN;
+  const type=detType(det);
+  const feed=document.getElementById('feed');
+  const el=document.createElement('div');
+  el.className=`fi ${type}`; el.dataset.t=type;
+  const ts=(det.timestamp||'').split(' ')[1]||det.timestamp||'—';
+  const tl=type==='crack'?'⚡ CRACK':type==='replay'?'🔁 REPLAY':'📡 POTHOLE';
+  el.innerHTML=`
+    <div class="fi-top">
+      <span class="fi-tag ${type}">${tl}</span>
+      <span class="fi-sev ${det.severity}">${det.severity}</span>
+    </div>
+    <div class="fi-id">${det.id}</div>
+    <div class="fi-coord">${det.latitude.toFixed(6)}, ${det.longitude.toFixed(6)}</div>
+    <div class="fi-meta"><span>CONF ${(det.confidence*100).toFixed(0)}%</span><span>${ts}</span></div>
+    <div class="fi-vid">VID: ${det.vehicle_id||'—'}</div>`;
+  el.addEventListener('click',()=>map.setView([det.latitude,det.longitude],18,{animate:true}));
+  if(filter!=='all'&&el.dataset.t!==filter) el.style.display='none';
+  feed.insertBefore(el,feed.firstChild);
+  while(feed.children.length>200) feed.removeChild(feed.lastChild);
+}
+
+// Toast
+let toastT=null;
+function toast(det) {
+  if(!isPi(det)||det.severity!=='HIGH') return;
+  document.getElementById('tm').textContent=`${det.latitude.toFixed(5)}, ${det.longitude.toFixed(5)}`;
+  document.getElementById('toast').className='on';
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>document.getElementById('toast').className='',4000);
+}
+
+// Load existing Pi detections
+fetch(`${BASE}/api/detections?limit=200`,{headers:{'X-API-Key':KEY}})
+  .then(r=>r.json()).then(d=>{
+    [...d.detections].reverse().forEach(det=>{
+      addMarker(det); addFeed(det); countDet(det);
+    });
+    if(marks.length) {
+      const grp=L.featureGroup(marks);
+      map.fitBounds(grp.getBounds().pad(.15));
+    }
+    renderStats();
+  }).catch(()=>{});
+
+// SSE
+function connectSSE() {
+  const es=new EventSource(`${BASE}/api/stream?key=${KEY}`);
+
+  es.addEventListener('connected',()=>{
+    document.getElementById('slabel').textContent='LIVE';
+    document.getElementById('slabel').style.color='var(--low)';
+    document.getElementById('sdot').style.cssText='background:var(--low);box-shadow:0 0 10px var(--low)';
+    document.getElementById('piStream').textContent='CONNECTED';
+  });
+
+  es.addEventListener('detection',e=>{
+    const det=JSON.parse(e.data);
+    if(!isPi(det)) return;
+    addMarker(det); addFeed(det); countDet(det); toast(det);
+    document.getElementById('piStream').textContent=
+      new Date().toLocaleTimeString('en-GB',{hour12:false});
+  });
+
+  es.addEventListener('heartbeat',()=>{
+    document.getElementById('piStream').textContent=
+      '♥ '+new Date().toLocaleTimeString('en-GB',{hour12:false});
+  });
+
+  es.onerror=()=>{
+    document.getElementById('slabel').textContent='RECONNECTING';
+    document.getElementById('slabel').style.color='var(--med)';
+    document.getElementById('sdot').style.cssText='background:var(--med);box-shadow:0 0 8px var(--med)';
+    es.close(); setTimeout(connectSSE,3000);
+  };
+}
+connectSSE();
+</script>
+</body>
+</html>
