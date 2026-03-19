@@ -56,6 +56,24 @@ _vehicle_lock      = threading.Lock()
 _road_network      = {"segments": [], "sidewalks": [], "map": ""}
 _road_lock         = threading.Lock()
 
+# ── Pothole consensus vote store ───────────────────────────────────────────
+# Key: snapped grid cell string "x,y"  (5-metre grid)
+# Value: { "pothole": set(vehicle_ids), "clear": set(vehicle_ids),
+#          "confirmed": bool, "resolved": bool,
+#          "carla_x": float, "carla_y": float }
+_vote_store      = {}
+_vote_lock       = threading.Lock()
+POTHOLE_THRESHOLD = 10   # votes to confirm a pothole
+CLEAR_THRESHOLD   = 15   # votes to resolve / remove it
+SNAP_GRID         = 5.0  # metres — coordinate snapping granularity
+
+def _snap(val):
+    """Snap a coordinate to the nearest grid cell centre."""
+    return round(round(val / SNAP_GRID) * SNAP_GRID, 1)
+
+def _cell_key(x, y):
+    return f"{_snap(x)},{_snap(y)}"
+
 class RateLimiter:
     def __init__(self):
         self.windows = {}
@@ -280,6 +298,92 @@ def get_detection(det_id):
 def stats():
     return jsonify(get_stats())
 
+# ── Pothole consensus voting ───────────────────────────────────────────────
+
+@app.route("/api/pothole_vote", methods=["POST"])
+@require_api_key
+@require_role("device", "admin")
+def pothole_vote():
+    data = request.get_json(force=True, silent=True) or {}
+    vid  = data.get("vehicle_id", "unknown")
+    vote = data.get("vote", "")
+    try:
+        cx = float(data["carla_x"])
+        cy = float(data["carla_y"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "carla_x and carla_y required"}), 400
+    if vote not in ("pothole", "clear"):
+        return jsonify({"error": "vote must be 'pothole' or 'clear'"}), 400
+
+    key = _cell_key(cx, cy)
+    sx, sy = _snap(cx), _snap(cy)
+
+    with _vote_lock:
+        if key not in _vote_store:
+            _vote_store[key] = {
+                "pothole":   set(),
+                "clear":     set(),
+                "confirmed": False,
+                "resolved":  False,
+                "carla_x":   sx,
+                "carla_y":   sy,
+            }
+        cell = _vote_store[key]
+        cell[vote].add(vid)
+        pothole_count = len(cell["pothole"])
+        clear_count   = len(cell["clear"])
+
+    if vote == "pothole" and pothole_count >= POTHOLE_THRESHOLD and not _vote_store[key]["confirmed"]:
+        with _vote_lock:
+            _vote_store[key]["confirmed"] = True
+            _vote_store[key]["resolved"]  = False
+        broker.publish("pothole_confirmed", {
+            "carla_x":  sx, "carla_y": sy,
+            "votes":    pothole_count, "cell_key": key,
+        })
+        print(f"[Vote] POTHOLE CONFIRMED at ({sx},{sy}) -- {pothole_count} votes")
+
+    elif (vote == "clear" and clear_count >= CLEAR_THRESHOLD
+          and _vote_store[key]["confirmed"] and not _vote_store[key]["resolved"]):
+        with _vote_lock:
+            _vote_store[key]["resolved"]  = True
+            _vote_store[key]["confirmed"] = False
+            _vote_store[key]["pothole"]   = set()
+            _vote_store[key]["clear"]     = set()
+        broker.publish("pothole_resolved", {
+            "carla_x": sx, "carla_y": sy, "cell_key": key,
+        })
+        print(f"[Vote] POTHOLE RESOLVED at ({sx},{sy}) -- {clear_count} clear votes")
+
+    broker.publish("vote_update", {
+        "carla_x":       sx,
+        "carla_y":       sy,
+        "cell_key":      key,
+        "pothole_votes": pothole_count,
+        "clear_votes":   clear_count,
+        "confirmed":     _vote_store[key]["confirmed"],
+        "resolved":      _vote_store[key]["resolved"],
+        "vehicle_id":    vid,
+        "vote":          vote,
+    })
+    return jsonify({"status": "ok", "cell": key,
+                    "pothole_votes": pothole_count, "clear_votes": clear_count}), 200
+
+
+@app.route("/api/pothole_zones", methods=["GET"])
+@require_api_key
+@require_role("dashboard", "admin", "device")
+def get_pothole_zones():
+    with _vote_lock:
+        result = [
+            {"cell_key": k, "carla_x": c["carla_x"], "carla_y": c["carla_y"],
+             "pothole_votes": len(c["pothole"]), "clear_votes": len(c["clear"]),
+             "confirmed": c["confirmed"], "resolved": c["resolved"]}
+            for k, c in _vote_store.items()
+        ]
+    return jsonify(result)
+
+
 # ── SSE stream ─────────────────────────────────────────────────────────────
 
 @app.route("/api/stream")
@@ -299,6 +403,16 @@ def sse_stream():
                 if _road_network["segments"]:
                     yield (f"event: road_network\ndata: "
                            f"{json.dumps({'map': _road_network['map'], 'segments': _road_network['segments'], 'sidewalks': _road_network['sidewalks']})}\n\n")
+            # Send current vote state so dashboard recovers after refresh
+            with _vote_lock:
+                zones_snapshot = [
+                    {"cell_key": k, "carla_x": c["carla_x"], "carla_y": c["carla_y"],
+                     "pothole_votes": len(c["pothole"]), "clear_votes": len(c["clear"]),
+                     "confirmed": c["confirmed"], "resolved": c["resolved"]}
+                    for k, c in _vote_store.items()
+                ]
+            if zones_snapshot:
+                yield (f"event: zones_snapshot\ndata: {json.dumps(zones_snapshot)}\n\n")
             while True:
                 try:
                     msg = q.get(timeout=20)
