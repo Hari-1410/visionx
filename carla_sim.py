@@ -98,18 +98,22 @@ def to_gps(x, y):
     mlon = 111320.0 * math.cos(math.radians(ANCHOR_LAT))
     return round(ANCHOR_LAT + y / mlat, 6), round(ANCHOR_LON + x / mlon, 6)
 
-# ── Pre-seed pothole & cleared zones ─────────────────────────────────────────
-def pick_zone_waypoints(n_pothole=10, n_clear=4):
+# ── Pre-seed pothole zones ────────────────────────────────────────────────────
+# All 10 zones start as potholes. The first 3 are also designated as
+# "cleanup zones" — after enough pothole votes accumulate, a background
+# timer flips them to clear mode so cars start voting "clear" on the
+# same coordinates, triggering the resolved threshold (≥15 clear votes).
+
+def pick_zone_waypoints(n_pothole=10):
     """
     Sample drivable waypoints spread across the map (20m grid buckets).
-    Returns lists of (x, y) tuples for pothole zones and clear zones.
+    Returns a list of (x, y) tuples for pothole zones.
     """
     all_wps  = carla_map.generate_waypoints(8.0)
     drivable = [wp for wp in all_wps if wp.lane_type == carla.LaneType.Driving]
     random.shuffle(drivable)
 
     pothole_zones = []
-    clear_zones   = []
     used_cells    = set()
 
     for wp in drivable:
@@ -118,22 +122,38 @@ def pick_zone_waypoints(n_pothole=10, n_clear=4):
         if cell in used_cells:
             continue
         used_cells.add(cell)
-        if len(pothole_zones) < n_pothole:
-            pothole_zones.append((round(x, 1), round(y, 1)))
-        elif len(clear_zones) < n_clear:
-            clear_zones.append((round(x, 1), round(y, 1)))
-        if len(pothole_zones) >= n_pothole and len(clear_zones) >= n_clear:
+        pothole_zones.append((round(x, 1), round(y, 1)))
+        if len(pothole_zones) >= n_pothole:
             break
 
-    print(f"[Zones] {len(pothole_zones)} pothole zones, {len(clear_zones)} clear zones")
+    print(f"[Zones] {len(pothole_zones)} pothole zones")
     for i, z in enumerate(pothole_zones):
         print(f"  Pothole zone {i+1:02d}: x={z[0]:8.1f}  y={z[1]:8.1f}")
-    for i, z in enumerate(clear_zones):
-        print(f"  Clear   zone {i+1:02d}: x={z[0]:8.1f}  y={z[1]:8.1f}")
-    return pothole_zones, clear_zones
+    return pothole_zones
 
-POTHOLE_ZONES, CLEAR_ZONES = pick_zone_waypoints(n_pothole=10, n_clear=4)
+POTHOLE_ZONES = pick_zone_waypoints(n_pothole=10)
 DETECTION_RADIUS = 12.0   # metres — car must be within this to trigger a vote
+
+# Zones 0,1,2 will be "cleaned up" after 60s — cars switch to voting clear on them
+# This is tracked in a shared set so all car threads see the update
+CLEANUP_ZONE_INDICES = {0, 1, 2}
+cleanup_active = set()   # indices currently in cleanup mode (vote "clear")
+cleanup_lock   = threading.Lock()
+
+def cleanup_scheduler():
+    """
+    After 60 seconds, flip zones 0,1,2 into cleanup mode.
+    Cars will then vote "clear" on those coordinates instead of "pothole",
+    driving the resolved threshold (≥15 clear votes).
+    """
+    time.sleep(60)
+    with cleanup_lock:
+        for idx in CLEANUP_ZONE_INDICES:
+            cleanup_active.add(idx)
+    znames = [f"zone {i+1}" for i in CLEANUP_ZONE_INDICES]
+    print(f"[Cleanup] Flipped {', '.join(znames)} to CLEAR mode")
+
+threading.Thread(target=cleanup_scheduler, daemon=True).start()
 
 # ── Spawn 30 cars ─────────────────────────────────────────────────────────────
 NUM_CARS  = 30
@@ -225,47 +245,34 @@ def car_loop(vehicle, vehicle_id, car_index):
             flagged   = now < flag_until
             flag_type = flag_type_cur if flagged else None
 
-            # ── Check pothole zones ───────────────────────────────────────
+            # ── Check all pothole zones ───────────────────────────────────
             for idx, (zx, zy) in enumerate(POTHOLE_ZONES):
                 d = euclid(x, y, zx, zy)
                 if d < DETECTION_RADIUS:
-                    if idx not in voted_pothole:
-                        voted_pothole.add(idx)
-                        # Small random delay to stagger simultaneous votes
+                    # Determine vote type: pothole or clear based on cleanup state
+                    with cleanup_lock:
+                        is_cleanup = idx in cleanup_active
+                    vote_type   = "clear" if is_cleanup else "pothole"
+                    voted_set   = voted_clear if is_cleanup else voted_pothole
+
+                    if idx not in voted_set:
+                        voted_set.add(idx)
                         time.sleep(random.uniform(0.0, 0.4))
                         threading.Thread(
                             target=send_pothole_vote,
-                            args=(vehicle_id, zx, zy, "pothole"),
+                            args=(vehicle_id, zx, zy, vote_type),
                             daemon=True
                         ).start()
                         flag_until    = time.time() + 2.5
-                        flag_type_cur = "pothole"
+                        flag_type_cur = vote_type
                         flagged       = True
-                        flag_type     = "pothole"
-                        print(f"[Car {car_index:02d}] FLAG pothole zone {idx+1:02d}  x={zx} y={zy}")
+                        flag_type     = vote_type
+                        label = "CLEAR  " if is_cleanup else "POTHOLE"
+                        print(f"[Car {car_index:02d}] FLAG {label} zone {idx+1:02d}  x={zx} y={zy}")
                 else:
-                    # Allow re-vote once the car has clearly left the zone
+                    # Allow re-vote once car has clearly left
                     if idx in voted_pothole and d > DETECTION_RADIUS * 1.8:
                         voted_pothole.discard(idx)
-
-            # ── Check clear zones ─────────────────────────────────────────
-            for idx, (zx, zy) in enumerate(CLEAR_ZONES):
-                d = euclid(x, y, zx, zy)
-                if d < DETECTION_RADIUS:
-                    if idx not in voted_clear:
-                        voted_clear.add(idx)
-                        time.sleep(random.uniform(0.0, 0.4))
-                        threading.Thread(
-                            target=send_pothole_vote,
-                            args=(vehicle_id, zx, zy, "clear"),
-                            daemon=True
-                        ).start()
-                        flag_until    = time.time() + 2.5
-                        flag_type_cur = "clear"
-                        flagged       = True
-                        flag_type     = "clear"
-                        print(f"[Car {car_index:02d}] FLAG clear   zone {idx+1:02d}  x={zx} y={zy}")
-                else:
                     if idx in voted_clear and d > DETECTION_RADIUS * 1.8:
                         voted_clear.discard(idx)
 
