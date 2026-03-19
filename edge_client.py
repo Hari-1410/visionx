@@ -35,7 +35,7 @@ class EdgeClient:
         queue_size: int = 200,
         offline_log: str = "offline_queue.jsonl",
     ):
-        self.base = (api_url or os.getenv("ROADSENSE_API_URL", "http://localhost:5000")).rstrip("/")
+        self.base = (api_url or os.getenv("ROADSENSE_API_URL", "https://visionx-production-425c.up.railway.app")).rstrip("/")
         self.api_key = api_key or os.getenv("ROADSENSE_API_KEY", "")
         self.vehicle_id = vehicle_id or os.getenv("VEHICLE_ID", _get_pi_serial())
         self.retry_limit = retry_limit
@@ -166,7 +166,7 @@ def _get_pi_serial() -> str:
 # ── Quick test ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import random
-    client = EdgeClient(api_url="http://localhost:5000",
+    client = EdgeClient(api_url="https://visionx-production-425c.up.railway.app",
                         api_key="dev-device-key-raspberry-pi")
     client.replay_offline_log()
 

@@ -9,7 +9,7 @@ Requirements:
 
 Usage:
   python carla_client.py --host 127.0.0.1 --port 2000 \
-      --api-url http://localhost:5000 \
+      --api-url https://visionx-production-425c.up.railway.app \
       --api-key dev-device-key-carla-sim \
       --model-path ../models/pothole_model.tflite
 """
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="RoadSense CARLA Client")
     parser.add_argument("--host",       default="127.0.0.1")
     parser.add_argument("--port",       type=int, default=2000)
-    parser.add_argument("--api-url",    default="http://localhost:5000")
+    parser.add_argument("--api-url",    default="https://visionx-production-425c.up.railway.app")
     parser.add_argument("--api-key",    default="dev-device-key-carla-sim")
     parser.add_argument("--model-path", default="")
     parser.add_argument("--frame-skip", type=int, default=5,
