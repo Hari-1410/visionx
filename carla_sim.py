@@ -222,25 +222,62 @@ def send_pothole_vote(vehicle_id, x, y, vote):
 def euclid(x1, y1, x2, y2):
     return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
 
+def is_alive(vehicle):
+    """Check if a CARLA actor is still valid and alive."""
+    try:
+        return vehicle is not None and vehicle.is_alive
+    except Exception:
+        return False
+
+def respawn_vehicle(car_index):
+    """Try to spawn a replacement vehicle at a random spawn point."""
+    try:
+        sp  = random.choice(carla_map.get_spawn_points())
+        bp  = random.choice(car_bps)
+        if bp.has_attribute('color'):
+            bp.set_attribute('color', random.choice(bp.get_attribute('color').recommended_values))
+        v = world.spawn_actor(bp, sp)
+        v.set_autopilot(True)
+        print(f"[Car {car_index:02d}] Respawned as {v.type_id}")
+        return v
+    except Exception as e:
+        print(f"[Car {car_index:02d}] Respawn failed: {e}")
+        return None
+
 def car_loop(vehicle, vehicle_id, car_index):
     """
     Runs continuously for one car.
     - Broadcasts position every ~0.4s including flag state
     - Detects proximity to pothole/clear zones and sends votes
     - Votes once per zone per pass; re-enables after car leaves the zone
+    - Auto-respawns if the CARLA actor gets destroyed
     """
-    voted_pothole = set()   # zone indices already voted this pass
+    voted_pothole = set()
     voted_clear   = set()
     flag_until    = 0.0
     flag_type_cur = None
+    consecutive_errors = 0
 
     while True:
+        # ── Actor liveness check ──────────────────────────────────────────
+        if not is_alive(vehicle):
+            print(f"[Car {car_index:02d}] Actor destroyed — attempting respawn in 3s...")
+            time.sleep(3)
+            vehicle = respawn_vehicle(car_index)
+            if vehicle is None:
+                time.sleep(5)
+                continue
+            consecutive_errors = 0
+            voted_pothole.clear()
+            voted_clear.clear()
+
         try:
             loc     = vehicle.get_location()
             tf      = vehicle.get_transform()
             x, y    = loc.x, loc.y
             heading = tf.rotation.yaw
             now     = time.time()
+            consecutive_errors = 0   # reset on success
 
             flagged   = now < flag_until
             flag_type = flag_type_cur if flagged else None
@@ -249,11 +286,10 @@ def car_loop(vehicle, vehicle_id, car_index):
             for idx, (zx, zy) in enumerate(POTHOLE_ZONES):
                 d = euclid(x, y, zx, zy)
                 if d < DETECTION_RADIUS:
-                    # Determine vote type: pothole or clear based on cleanup state
                     with cleanup_lock:
                         is_cleanup = idx in cleanup_active
-                    vote_type   = "clear" if is_cleanup else "pothole"
-                    voted_set   = voted_clear if is_cleanup else voted_pothole
+                    vote_type = "clear" if is_cleanup else "pothole"
+                    voted_set = voted_clear if is_cleanup else voted_pothole
 
                     if idx not in voted_set:
                         voted_set.add(idx)
@@ -270,7 +306,6 @@ def car_loop(vehicle, vehicle_id, car_index):
                         label = "CLEAR  " if is_cleanup else "POTHOLE"
                         print(f"[Car {car_index:02d}] FLAG {label} zone {idx+1:02d}  x={zx} y={zy}")
                 else:
-                    # Allow re-vote once car has clearly left
                     if idx in voted_pothole and d > DETECTION_RADIUS * 1.8:
                         voted_pothole.discard(idx)
                     if idx in voted_clear and d > DETECTION_RADIUS * 1.8:
@@ -284,7 +319,14 @@ def car_loop(vehicle, vehicle_id, car_index):
             ).start()
 
         except Exception as e:
-            print(f"[Car {car_index:02d}] Error: {e}")
+            consecutive_errors += 1
+            err_msg = str(e)
+            if "destroyed" in err_msg or consecutive_errors >= 5:
+                # Actor is gone — loop back to liveness check for respawn
+                print(f"[Car {car_index:02d}] Actor lost ({err_msg[:60]}) — will respawn")
+                vehicle = None
+            else:
+                print(f"[Car {car_index:02d}] Error: {err_msg[:80]}")
 
         time.sleep(0.4)
 
