@@ -188,10 +188,15 @@ def update_spectator(v):
     ))
 
 # ── API helpers ───────────────────────────────────────────────────────────────
-def send_vehicle_position(vehicle_id, x, y, heading, flagged=False, flag_type=None):
+# Shared position buffer — car threads write here, batch sender reads every 0.5s
+_pos_buffer      = {}   # vehicle_id -> position dict
+_pos_buffer_lock = threading.Lock()
+
+def update_position_buffer(vehicle_id, x, y, heading, flagged=False, flag_type=None):
+    """Write latest position into the shared buffer (no HTTP call)."""
     lat, lon = to_gps(x, y)
-    try:
-        session.post(f"{ROADSENSE_URL}/api/vehicle", json={
+    with _pos_buffer_lock:
+        _pos_buffer[vehicle_id] = {
             "vehicle_id": vehicle_id,
             "source":     "carla",
             "latitude":   lat,
@@ -202,9 +207,27 @@ def send_vehicle_position(vehicle_id, x, y, heading, flagged=False, flag_type=No
             "ts":         time.time(),
             "flagged":    flagged,
             "flag_type":  flag_type or "",
-        }, timeout=2)
-    except Exception:
-        pass
+        }
+
+def batch_position_sender():
+    """
+    Runs in its own thread. Every 0.5s sends ALL car positions in a
+    single POST to /api/vehicles/batch — 1 request instead of 30.
+    This cuts HTTP load by 30x and eliminates the FPS drop on the dashboard.
+    """
+    while True:
+        time.sleep(0.5)
+        with _pos_buffer_lock:
+            if not _pos_buffer:
+                continue
+            payload = list(_pos_buffer.values())
+        try:
+            session.post(f"{ROADSENSE_URL}/api/vehicles/batch",
+                         json={"vehicles": payload}, timeout=4)
+        except Exception:
+            pass
+
+threading.Thread(target=batch_position_sender, daemon=True).start()
 
 def send_pothole_vote(vehicle_id, x, y, vote):
     """vote = 'pothole' | 'clear'"""
@@ -311,12 +334,8 @@ def car_loop(vehicle, vehicle_id, car_index):
                     if idx in voted_clear and d > DETECTION_RADIUS * 1.8:
                         voted_clear.discard(idx)
 
-            # ── Broadcast position ────────────────────────────────────────
-            threading.Thread(
-                target=send_vehicle_position,
-                args=(vehicle_id, x, y, heading, flagged, flag_type),
-                daemon=True
-            ).start()
+            # ── Write position to shared buffer (batch sender handles HTTP) ──
+            update_position_buffer(vehicle_id, x, y, heading, flagged, flag_type)
 
         except Exception as e:
             consecutive_errors += 1

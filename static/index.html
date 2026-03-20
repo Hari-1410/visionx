@@ -618,6 +618,9 @@ function onZonesSnapshot(zones){
       confirmed:     z.confirmed,
       resolved:      z.resolved,
     });
+    // Populate feed for zones that were already confirmed/resolved before connect
+    if(z.confirmed)  addFeedItem('confirmed', z.carla_x, z.carla_y, z.pothole_votes, z.clear_votes);
+    else if(z.resolved) addFeedItem('resolved', z.carla_x, z.carla_y, z.pothole_votes, z.clear_votes);
   }
   document.getElementById('pCells').textContent = voteZones.size;
   updateConsensusStats();
@@ -710,6 +713,14 @@ function connectSSE(){
   es.addEventListener('vehicle', e=>{
     const v=JSON.parse(e.data);
     if(v.source==='carla') onVehicle(v);
+    document.getElementById('hudSSE').textContent=
+      new Date().toLocaleTimeString('en-GB',{hour12:false});
+  });
+
+  // Batch fleet update — all 30 cars in one SSE event
+  es.addEventListener('fleet_snapshot', e=>{
+    const fleet=JSON.parse(e.data);
+    fleet.forEach(v=>{ if(v.source==='carla') onVehicle(v); });
     document.getElementById('hudSSE').textContent=
       new Date().toLocaleTimeString('en-GB',{hour12:false});
   });

@@ -172,6 +172,29 @@ def get_all_vehicles():
     with _vehicle_lock:
         return jsonify(list(_vehicle_positions.values()))
 
+@app.route("/api/vehicles/batch", methods=["POST"])
+@require_api_key
+@require_role("device", "admin")
+def batch_update_vehicles():
+    """
+    Receive all 30 car positions in a single request.
+    Stores each one and fires a single SSE event with the full fleet snapshot
+    instead of 30 individual SSE events — cuts dashboard render load by 30x.
+    """
+    data     = request.get_json(force=True, silent=True) or {}
+    vehicles = data.get("vehicles", [])
+    if not vehicles:
+        return jsonify({"error": "no vehicles"}), 400
+
+    with _vehicle_lock:
+        for v in vehicles:
+            vid = v.get("vehicle_id", "unknown")
+            _vehicle_positions[vid] = v
+
+    # Single SSE event with full fleet snapshot
+    broker.publish("fleet_snapshot", vehicles)
+    return jsonify({"status": "ok", "count": len(vehicles)}), 200
+
 # ── Road network ───────────────────────────────────────────────────────────
 
 @app.route("/api/road_network", methods=["POST"])
