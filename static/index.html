@@ -10,7 +10,7 @@
   :root{
     --bg:#080b0f;--panel:#0f1318;--p2:#141920;--bord:#1c2535;
     --accent:#00e5ff;--high:#ff3b3b;--med:#ffaa00;--low:#00e676;
-    --crack:#c084fc;--muted:#4d6070;--text:#cce0f0;
+    --muted:#4d6070;--text:#cce0f0;
     --mono:'Share Tech Mono',monospace;--ui:'Barlow Condensed',sans-serif;
     --vote:#f59e0b;--confirmed:#ff3b3b;--clear:#00e676;
   }
@@ -21,7 +21,7 @@
   header{grid-column:1/-1;background:var(--panel);border-bottom:1px solid var(--bord);
     display:flex;align-items:center;padding:0 22px;gap:16px;position:relative;overflow:hidden}
   header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
-    background:linear-gradient(90deg,transparent,var(--accent),var(--crack),transparent);
+    background:linear-gradient(90deg,transparent,var(--accent),var(--low),transparent);
     animation:hline 4s linear infinite}
   @keyframes hline{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
   .logo{font-weight:900;font-size:24px;letter-spacing:5px;color:var(--accent);text-transform:uppercase;

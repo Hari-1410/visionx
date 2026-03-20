@@ -19,7 +19,6 @@
     --high:  #ff3b3b;
     --med:   #ffaa00;
     --low:   #00e676;
-    --crack: #c084fc;
     --muted: #4d6070;
     --text:  #cce0f0;
     --mono:  'Share Tech Mono', monospace;
@@ -94,7 +93,6 @@
   .scard.c-total::after { background:var(--pi); }
   .scard.c-conf::after  { background:var(--med); }
   .scard.c-poth::after  { background:var(--low); }
-  .scard.c-crack::after { background:var(--crack); }
   .scard.c-high::after  { background:var(--high); }
   .scard.c-today::after { background:var(--low); }
 
@@ -103,7 +101,6 @@
   .scard.c-total .sv { color:var(--pi); }
   .scard.c-conf  .sv { color:var(--med); font-size:26px; }
   .scard.c-poth  .sv { color:var(--low); }
-  .scard.c-crack .sv { color:var(--crack); }
   .scard.c-high  .sv { color:var(--high); }
   .scard.c-today .sv { color:var(--med); }
   .ssub { font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:4px; }
@@ -161,7 +158,6 @@
   .ftab.on { background:var(--panel); color:var(--text); }
   .ftab.on.t-all     { border-top:2px solid var(--pi); }
   .ftab.on.t-pothole { border-top:2px solid var(--low); }
-  .ftab.on.t-crack   { border-top:2px solid var(--crack); }
   .ftab.on.t-replay  { border-top:2px solid var(--med); }
 
   #feed { flex:1; overflow-y:auto; }
@@ -175,14 +171,12 @@
   }
   .fi:hover { background:rgba(255,255,255,.025); }
   .fi.pothole { border-left-color:var(--low); }
-  .fi.crack   { border-left-color:var(--crack); }
   .fi.replay  { border-left-color:var(--med); }
   @keyframes fin{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
 
   .fi-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
   .fi-tag { font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:2px; padding:2px 6px; border-radius:2px; }
   .fi-tag.pothole { background:rgba(0,230,118,.1); color:var(--low); }
-  .fi-tag.crack   { background:rgba(192,132,252,.1); color:var(--crack); }
   .fi-tag.replay  { background:rgba(255,170,0,.1); color:var(--med); }
   .fi-sev { font-family:var(--mono); font-size:13px; font-weight:700; }
   .fi-sev.HIGH   { color:var(--high); }
@@ -214,7 +208,7 @@
   <div class="hdiv"></div>
   <div class="htag">EDGE DEVICE MONITOR</div>
   <div class="nav-tabs">
-    <a href="/index.html" class="nav-tab carla">CARLA</a>
+    <a href="/" class="nav-tab carla">CARLA</a>
     <a href="/pi.html"    class="nav-tab active">RASPBERRY PI</a>
   </div>
   <div class="sdot" id="sdot"></div>
@@ -237,7 +231,6 @@
     <div class="scard c-total"><div class="sl">Pi Total</div><div class="sv" id="sTotal">—</div><div class="ssub" id="sToday">today: —</div></div>
     <div class="scard c-conf" ><div class="sl">Avg Conf</div><div class="sv" id="sConf">—</div><div class="ssub">pi detections</div></div>
     <div class="scard c-poth" ><div class="sl">Potholes</div><div class="sv" id="sPoth">0</div><div class="ssub">from pi</div></div>
-    <div class="scard c-crack"><div class="sl">Cracks</div><div class="sv" id="sCrack">0</div><div class="ssub">from pi</div></div>
     <div class="scard c-high" ><div class="sl">High Sev</div><div class="sv" id="sHigh">0</div><div class="ssub">critical</div></div>
     <div class="scard c-today"><div class="sl">Replayed</div><div class="sv" id="sReplay">0</div><div class="ssub">offline queue</div></div>
   </div>
@@ -280,10 +273,6 @@
       Pi Pothole
     </div>
     <div class="leg-row">
-      <div style="width:11px;height:11px;background:var(--crack);border-radius:2px;transform:rotate(45deg);flex-shrink:0"></div>
-      Pi Crack
-    </div>
-    <div class="leg-row">
       <div style="width:11px;height:11px;border-radius:50%;background:var(--med);flex-shrink:0"></div>
       Replayed (offline)
     </div>
@@ -299,7 +288,6 @@
   <div class="f-tabs">
     <button class="ftab t-all on"     onclick="setFilter('all',this)">ALL</button>
     <button class="ftab t-pothole"    onclick="setFilter('pothole',this)">POTHOLE</button>
-    <button class="ftab t-crack"      onclick="setFilter('crack',this)">CRACK</button>
     <button class="ftab t-replay"     onclick="setFilter('replay',this)">REPLAY</button>
   </div>
   <div id="feed"></div>
@@ -311,7 +299,7 @@
 const KEY  = 'dev-dashboard-key-browser';
 const BASE = window.location.origin;
 let filter='all', feedN=0, markerN=0;
-let piHigh=0, piMed=0, piLow=0, piPoth=0, piCrack=0, piReplay=0, piConf=[];
+let piHigh=0, piMed=0, piLow=0, piPoth=0, piReplay=0, piConf=[];
 let piTrailPts=[], piVehicleId='—';
 let lastPiTs = null;
 
@@ -363,18 +351,11 @@ function isPi(det) {
 }
 
 function detType(det) {
-  if (det.source==='crack'||(det.id||'').startsWith('CRK')) return 'crack';
   if (det.source==='replay') return 'replay';
   return 'pothole';
 }
 
 function mkIcon(sev, type) {
-  if (type==='crack') {
-    const col = sev==='HIGH'?'#c084fc':sev==='MEDIUM'?'#a855f7':'#7c3aed';
-    return L.divIcon({className:'',
-      html:`<div style="width:12px;height:12px;background:${col};border-radius:2px;transform:rotate(45deg);border:1.5px solid rgba(255,255,255,.2);box-shadow:0 0 8px ${col}"></div>`,
-      iconSize:[14,14],iconAnchor:[7,7]});
-  }
   if (type==='replay') {
     // Yellow circle for replayed offline data
     return L.divIcon({className:'',
@@ -390,8 +371,8 @@ function mkIcon(sev, type) {
 
 function mkPopup(det,type) {
   const sc = det.severity==='HIGH'?'#ff3b3b':det.severity==='MEDIUM'?'#ffaa00':'#00e676';
-  const tc = type==='crack'?'#c084fc':type==='replay'?'#ffaa00':'var(--pi)';
-  const tl = type==='crack'?'⚡ PI CRACK':type==='replay'?'🔁 REPLAYED':'📡 PI POTHOLE';
+  const tc = type==='replay'?'#ffaa00':'var(--pi)';
+  const tl = type==='replay'?'🔁 REPLAYED':'📡 PI POTHOLE';
   return `<div class="pop"><div class="pop-title" style="color:${tc}">${tl}</div>
     <div class="pr"><span class="pk">ID</span><span class="pv">${det.id}</span></div>
     <div class="pr"><span class="pk">SEVERITY</span><span class="pv" style="color:${sc}">${det.severity}</span></div>
@@ -423,8 +404,7 @@ function countDet(det) {
   if(det.severity==='HIGH')   piHigh++;
   if(det.severity==='MEDIUM') piMed++;
   if(det.severity==='LOW')    piLow++;
-  if(type==='crack')  piCrack++;
-  else if(type==='replay') piReplay++;
+  if(type==='replay') piReplay++;
   else piPoth++;
   piConf.push(det.confidence);
   if(det.vehicle_id&&det.vehicle_id!==piVehicleId) {
@@ -442,7 +422,6 @@ function renderStats() {
   const tot = piHigh+piMed+piLow||1;
   document.getElementById('sTotal').textContent  = piHigh+piMed+piLow;
   document.getElementById('sPoth').textContent   = piPoth;
-  document.getElementById('sCrack').textContent  = piCrack;
   document.getElementById('sHigh').textContent   = piHigh;
   document.getElementById('sReplay').textContent = piReplay;
   const avg = piConf.length ? piConf.reduce((a,b)=>a+b,0)/piConf.length : 0;
@@ -484,7 +463,7 @@ function addFeed(det) {
   const el=document.createElement('div');
   el.className=`fi ${type}`; el.dataset.t=type;
   const ts=(det.timestamp||'').split(' ')[1]||det.timestamp||'—';
-  const tl=type==='crack'?'⚡ CRACK':type==='replay'?'🔁 REPLAY':'📡 POTHOLE';
+  const tl=type==='replay'?'🔁 REPLAY':'📡 POTHOLE';
   el.innerHTML=`
     <div class="fi-top">
       <span class="fi-tag ${type}">${tl}</span>
